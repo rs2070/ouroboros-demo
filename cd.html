@@ -289,6 +289,31 @@
             }
         }
 
+        function disposeObject3D(obj) {
+  if (!obj) return;
+  obj.traverse((child) => {
+    if (child.isMesh) {
+      if (child.geometry) child.geometry.dispose();
+
+      const mat = child.material;
+      if (mat) {
+        // dispose textures on material
+        const disposeMat = (m) => {
+          for (const key in m) {
+            const val = m[key];
+            if (val && val.isTexture) val.dispose();
+          }
+          m.dispose();
+        };
+
+        if (Array.isArray(mat)) mat.forEach(disposeMat);
+        else disposeMat(mat);
+      }
+    }
+  });
+}
+
+
         // // Fetch unlockables and update UI
         // async function updateUnlockables() {
         //     try {
@@ -380,14 +405,22 @@ function playRandomSong() {
 
     // Load the corresponding model
     loader.load(selectedSong.model, function (gltf) {
-        scene.remove(cdMesh);
-        cdMesh = gltf.scene;
-        cdMesh.scale.set(15, 15, 15);
-        cdMesh.rotation.x = targetXRotation;
-        cdMesh.rotation.y = targetYRotation;
-        scene.add(cdMesh);
-        console.log("Model switched to " + selectedSong.model);
-    });
+  // remove + fully dispose old mesh (mobile fix)
+  if (cdMesh) {
+    scene.remove(cdMesh);
+    disposeObject3D(cdMesh);
+  }
+
+  cdMesh = gltf.scene;
+  scene.add(cdMesh);
+
+  cdMesh.scale.set(15, 15, 15);
+  cdMesh.rotation.x = targetXRotation;
+  cdMesh.rotation.y = targetYRotation;
+
+  console.log("Model switched to " + selectedSong.model);
+});
+
 
     // Play the selected song
     audio.src = selectedSong.song;
