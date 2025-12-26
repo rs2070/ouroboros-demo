@@ -230,6 +230,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/build/three.min.js"></script>
     <!-- GLTF Loader script -->
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/loaders/DRACOLoader.js"></script>
     <script>
         console.log("Script is running");
 
@@ -336,6 +337,8 @@
         var scene = new THREE.Scene();
         var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         var renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('cdModelContainer').appendChild(renderer.domElement);
     
@@ -348,6 +351,10 @@
     
         // Load initial model
         var loader = new THREE.GLTFLoader();
+        const dracoLoader = new THREE.DRACOLoader();
+dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/libs/draco/');
+loader.setDRACOLoader(dracoLoader);
+
         var cdMesh;
         var initialModel = 'media/CD2.glb';
         loader.load(initialModel, function (gltf) {
