@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <link rel="icon" href="media/linuxpenguin.png" type="image/x-icon">
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>[demo 22726]</title>
+
   <style>
     body, html {
       height: 100%;
@@ -15,7 +16,13 @@
       align-items: center;
       overflow: hidden;
     }
-    #cdModelContainer { width: 100vw; height: 100vh; }
+
+    #cdModelContainer {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
     #cdInteractionButton {
       position: absolute;
       width: 40vw;
@@ -28,54 +35,135 @@
       cursor: pointer;
       display: block;
       z-index: 10;
+      -webkit-tap-highlight-color: transparent;
     }
+
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      z-index: 1000;
+    }
+
+    #videoPopup, #merchPopup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 28%;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 20px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+    }
+
+    .closeButton {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      background-color: red;
+      color: white;
+      border: none;
+      cursor: pointer;
+      padding: 5px 10px;
+      font-size: 16px;
+    }
+
+    /* optional: keep your merch button disabled like before */
+    #merchButton {
+      position: absolute;
+      left: 8%;
+      bottom: 35px;
+      width: 190px;
+      height: 95px;
+      background-color: transparent;
+      background-repeat: no-repeat;
+      background-size: contain;
+      border: none;
+      cursor: default;
+      pointer-events: none;
+      display: block;
+      z-index: 20;
+    }
+
+    #merchImage { width: 100%; height: auto; }
+    #merchPopup span { display: none; }
   </style>
 </head>
 
 <body>
+  <div id="overlay"></div>
+
   <div id="cdModelContainer">
-    <button id="cdInteractionButton"></button>
+    <button id="cdInteractionButton" aria-label="Play CD"></button>
   </div>
 
-  <!-- Three.js -->
+  <button id="merchButton" disabled></button>
+
+  <div id="merchPopup" onclick="hideMerchPopup()">
+    <img id="merchImage" src="media/warmerch.jpg" alt="Merchandise" />
+    <div style="text-align:center;"><span>Click anywhere to close.</span></div>
+  </div>
+
+  <div id="videoPopup">
+    <button class="closeButton" onclick="hideVideoPopup()">X</button>
+    <video width="100%" height="auto" controls id="videoPlayer">
+      <source src="" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/loaders/GLTFLoader.js"></script>
 
-  <!-- IMPORTANT: versioned DRACO loader + decoder path -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/loaders/DRACOLoader.js"></script>
-
   <script>
-    console.log("Script is running");
-
-    // ---------- helpers ----------
-    function disposeObject3D(obj) {
-      if (!obj) return;
-      obj.traverse((child) => {
-        if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose();
-          const mat = child.material;
-          const disposeMat = (m) => {
-            if (!m) return;
-            for (const key in m) {
-              const val = m[key];
-              if (val && val.isTexture) val.dispose();
-            }
-            m.dispose();
-          };
-          if (Array.isArray(mat)) mat.forEach(disposeMat);
-          else disposeMat(mat);
-        }
-      });
+    // ----------------------------
+    // Small UI helpers (unchanged vibe)
+    // ----------------------------
+    function showMerchPopup() {
+      document.getElementById('merchPopup').style.display = 'block';
+      document.getElementById('overlay').style.display = 'block';
+    }
+    function hideMerchPopup() {
+      document.getElementById('merchPopup').style.display = 'none';
+      document.getElementById('overlay').style.display = 'none';
+    }
+    function showVideo(videoFile) {
+      const videoPlayer = document.getElementById('videoPlayer');
+      videoPlayer.src = videoFile;
+      document.getElementById('videoPopup').style.display = 'block';
+      document.getElementById('overlay').style.display = 'block';
+    }
+    function hideVideoPopup() {
+      const videoPopup = document.getElementById('videoPopup');
+      videoPopup.style.display = 'none';
+      const vp = document.getElementById('videoPlayer');
+      vp.pause();
+      vp.currentTime = 0;
+      document.getElementById('overlay').style.display = 'none';
     }
 
-    // ---------- scene setup ----------
+    // ----------------------------
+    // THREE SETUP (mobile-safe-ish)
+    // ----------------------------
+    const container = document.getElementById('cdModelContainer');
+    const interactionButton = document.getElementById('cdInteractionButton');
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance"
+    });
+
+    // cap DPR for mobile memory
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    document.getElementById('cdModelContainer').appendChild(renderer.domElement);
+    container.appendChild(renderer.domElement);
 
     // Lighting
     scene.add(new THREE.AmbientLight(0x404040, 4));
@@ -83,34 +171,158 @@
     pointLight.position.set(10, 10, 10);
     scene.add(pointLight);
 
-    // Loader (GLTF + DRACO)
-    const loader = new THREE.GLTFLoader();
-    const dracoLoader = new THREE.DRACOLoader();
-    dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.140.0/examples/js/libs/draco/');
-    loader.setDRACOLoader(dracoLoader);
+    camera.position.z = 50;
 
+    // ----------------------------
+    // LOADING / DISPOSAL (important for mobile)
+    // ----------------------------
+    const loader = new THREE.GLTFLoader();
     let cdMesh = null;
 
-    // Songs
+    function disposeObject3D(obj) {
+      if (!obj) return;
+      obj.traverse((child) => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          const mat = child.material;
+          if (mat) {
+            const disposeMat = (m) => {
+              for (const key in m) {
+                const v = m[key];
+                if (v && v.isTexture) v.dispose();
+              }
+              m.dispose();
+            };
+            if (Array.isArray(mat)) mat.forEach(disposeMat);
+            else disposeMat(mat);
+          }
+        }
+      });
+    }
+
+    function loadModel(modelPath, onDone) {
+      console.log("Loading model:", modelPath);
+
+      loader.load(
+        modelPath,
+        (gltf) => {
+          if (cdMesh) {
+            scene.remove(cdMesh);
+            disposeObject3D(cdMesh);
+          }
+          cdMesh = gltf.scene;
+          scene.add(cdMesh);
+
+          cdMesh.scale.set(15, 15, 15);
+          cdMesh.rotation.x = currentX;
+          cdMesh.rotation.y = currentY;
+          cdMesh.rotation.z = currentZ;
+
+          console.log("Loaded ok:", modelPath);
+          if (onDone) onDone();
+        },
+        (xhr) => {
+          if (xhr.total) {
+            console.log(modelPath, Math.round((xhr.loaded / xhr.total) * 100) + "%");
+          } else {
+            console.log(modelPath, "loading...");
+          }
+        },
+        (err) => {
+          console.error("FAILED loading:", modelPath, err);
+        }
+      );
+    }
+
+    // Preload models so mobile actually fetches them early
+    const MODEL_BLACKBLUE = "media/CD2.glb";      // "regular" (black/blue)
+    const MODEL_BLUEGREEN = "media/CDgreen.glb";  // green (blue/green)
+    const MODEL_GREYRED   = "media/CDred.glb";    // red (grey/red)
+
+    // iOS/Safari sometimes won’t cache unless requested; force warmup loads:
+    function preloadModelsThenStart() {
+      const warmup = [MODEL_BLACKBLUE, MODEL_BLUEGREEN, MODEL_GREYRED];
+      let i = 0;
+
+      const next = () => {
+        if (i >= warmup.length) {
+          // start on your default
+          loadModel(MODEL_BLACKBLUE, () => {
+            animate();
+          });
+          return;
+        }
+
+        const path = warmup[i++];
+        loader.load(
+          path,
+          (gltf) => {
+            // dispose immediately; this is just to prime network/cache
+            disposeObject3D(gltf.scene);
+            next();
+          },
+          undefined,
+          (err) => {
+            console.warn("Preload failed for", path, err);
+            next(); // continue anyway
+          }
+        );
+      };
+
+      next();
+    }
+
+    // ----------------------------
+    // SONG -> MODEL MAPPING (THIS IS WHAT YOU ASKED)
+    // ----------------------------
     const songs = [
-      { song: 'audio/bloodgnats.mp3', model: 'media/CD2.glb' },
-      { song: 'audio/walkdown.mp3', model: 'media/CD2.glb' },
-      { song: 'audio/orochimaru.mp3', model: 'media/CD2.glb' },
-      { song: 'audio/the rapture.mp3', model: 'media/CD2.glb' },
-      { song: 'audio/Trapstar.mp3', model: 'media/CDgreen.glb' },
-      { song: 'audio/I_Know.mp3', model: 'media/CDgreen.glb' },
-      { song: 'audio/GOBLINREAL.mp3', model: 'media/CDgreen.glb' },
-      { song: 'audio/foresight.mp3', model: 'media/CDred.glb' },
-      { song: 'audio/tranquility.mp3', model: 'media/CDred.glb' },
-      { song: 'audio/quasar.mp3', model: 'media/CDred.glb' }
+      // regular black/blue
+      { song: "audio/bloodgnats.mp3",     model: MODEL_BLACKBLUE },
+      { song: "audio/walkdown.mp3",       model: MODEL_BLACKBLUE },
+      { song: "audio/orochimaru.mp3",     model: MODEL_BLACKBLUE },
+      { song: "audio/the rapture.mp3",    model: MODEL_BLACKBLUE },
+
+      // blue/green
+      { song: "audio/Trapstar.mp3",       model: MODEL_BLUEGREEN },
+      { song: "audio/I_Know.mp3",         model: MODEL_BLUEGREEN },
+      { song: "audio/GOBLINREAL.mp3",     model: MODEL_BLUEGREEN },
+
+      // grey/red
+      { song: "audio/foresight.mp3",      model: MODEL_GREYRED },
+      { song: "audio/tranquility.mp3",    model: MODEL_GREYRED },
+      { song: "audio/quasar.mp3",         model: MODEL_GREYRED }
     ];
 
+    // ----------------------------
+    // AUDIO (mobile requires user gesture; click counts)
+    // ----------------------------
     const audio = new Audio();
+    audio.preload = "auto";
 
-    // Rotation state
-    let targetXRotation = Math.PI / 3;
-    let targetYRotation = (Math.PI / 5) * (-3.75);
-    let targetZRotation = 0;
+    function playRandomSongAndSwapModel() {
+      const idx = Math.floor(Math.random() * songs.length);
+      const selected = songs[idx];
+
+      console.log("Selected:", selected.song, "model:", selected.model);
+
+      // swap model first (so user sees feedback quickly)
+      loadModel(selected.model);
+
+      // play audio (may fail if not user-initiated; but this is inside click)
+      audio.src = selected.song;
+      audio.play().catch((e) => console.warn("Audio play blocked:", e));
+    }
+
+    // ----------------------------
+    // ROTATION / ANIMATION (your same idea)
+    // ----------------------------
+    let targetX = Math.PI / 3;
+    let targetY = (Math.PI / 5) * (-3.75);
+    let targetZ = 0;
+
+    let currentX = targetX;
+    let currentY = targetY;
+    let currentZ = targetZ;
 
     const spinSpeed = 0.015;
     const clickSpinSpeed = 0.4;
@@ -119,66 +331,6 @@
     let isClicked = false;
     let isTransitionComplete = false;
 
-    // ---------- model load ----------
-    function loadModel(path, onDone) {
-      console.log("Loading model:", path);
-
-      loader.load(
-        path,
-        (gltf) => {
-          // dispose old model (mobile fix)
-          if (cdMesh) {
-            scene.remove(cdMesh);
-            disposeObject3D(cdMesh);
-          }
-
-          cdMesh = gltf.scene;
-          scene.add(cdMesh);
-
-          cdMesh.scale.set(15, 15, 15);
-          cdMesh.rotation.x = targetXRotation;
-          cdMesh.rotation.y = targetYRotation;
-          cdMesh.rotation.z = targetZRotation;
-
-          console.log("Model loaded OK:", path);
-          if (onDone) onDone();
-        },
-        (xhr) => {
-          // xhr.total can be 0 sometimes (no length header), so guard
-          if (xhr.total) {
-            console.log(`${path} ${(xhr.loaded / xhr.total * 100).toFixed(1)}%`);
-          }
-        },
-        (err) => {
-          console.error("MODEL LOAD FAILED:", path, err);
-        }
-      );
-    }
-
-    // initial model
-    camera.position.z = 50;
-    loadModel('media/CD2.glb', () => {
-      animate();
-    });
-
-    // ---------- play random ----------
-    function playRandomSong() {
-      const index = Math.floor(Math.random() * songs.length);
-      const selected = songs[index];
-
-      console.log("Selected:", selected.song, "Model:", selected.model);
-
-      // load model for this song
-      loadModel(selected.model);
-
-      // play audio
-      audio.src = selected.song;
-      audio.play().catch((e) => {
-        console.warn("Audio play blocked until user gesture (normal on mobile).", e);
-      });
-    }
-
-    // ---------- animation ----------
     function animate() {
       requestAnimationFrame(animate);
 
@@ -189,9 +341,9 @@
 
       if (isClicked) {
         if (!isTransitionComplete) {
-          const dx = (targetXRotation - cdMesh.rotation.x) * 0.1;
-          const dy = (targetYRotation - cdMesh.rotation.y) * 0.1;
-          const dz = (targetZRotation - cdMesh.rotation.z) * 0.1;
+          const dx = (targetX - cdMesh.rotation.x) * 0.1;
+          const dy = (targetY - cdMesh.rotation.y) * 0.1;
+          const dz = (targetZ - cdMesh.rotation.z) * 0.1;
 
           cdMesh.rotation.x += dx;
           cdMesh.rotation.y += dy;
@@ -213,51 +365,62 @@
       renderer.render(scene, camera);
     }
 
-    // ---------- click ----------
-    document.getElementById('cdInteractionButton').addEventListener('click', () => {
-      toggleCDPlay();
-    });
-
     function toggleCDPlay() {
       isClicked = !isClicked;
 
       if (isClicked) {
-        targetXRotation = 0.35;
-        targetYRotation = (Math.PI / 5) * (-2.75);
-        targetZRotation = 0;
-        playRandomSong();
+        // tilt + orient
+        targetX = 0.35;
+        targetY = (Math.PI / 5) * (-2.75);
+        targetZ = 0;
+
+        currentX = targetX;
+        currentY = targetY;
+        currentZ = targetZ;
+
+        playRandomSongAndSwapModel();
       } else {
-        targetXRotation = Math.PI / 3;
-        targetYRotation = (Math.PI / 5) * (-2.75);
-        targetZRotation = 0;
+        // reset
+        targetX = Math.PI / 3;
+        targetY = (Math.PI / 5) * (-2.75);
+        targetZ = 0;
 
         currentSpinSpeed = spinSpeed;
+
         audio.pause();
         audio.currentTime = 0;
       }
     }
 
-    // ---------- resize ----------
+    interactionButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleCDPlay();
+    });
+
+    // ----------------------------
+    // button sizing (fixes your old undefined variable bug)
+    // ----------------------------
     function adjustInteractionButton() {
-      const interactionButton = document.getElementById('cdInteractionButton'); // FIXED
-      const cdWidth = renderer.domElement.clientWidth * 0.30;
+      const cdWidth = renderer.domElement.clientWidth * 0.3;
       const cdHeight = cdWidth;
 
       interactionButton.style.width = `${cdWidth}px`;
       interactionButton.style.height = `${cdHeight}px`;
       interactionButton.style.left = `calc(50% - ${cdWidth/2}px)`;
-      interactionButton.style.top = `calc(50% - ${cdHeight/2}px)`;
+      interactionButton.style.top  = `calc(50% - ${cdHeight/2}px)`;
     }
 
-    window.addEventListener('resize', () => {
+    window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
       adjustInteractionButton();
     });
 
-    document.addEventListener('DOMContentLoaded', adjustInteractionButton);
-    adjustInteractionButton();
+    document.addEventListener("DOMContentLoaded", () => {
+      adjustInteractionButton();
+      preloadModelsThenStart();
+    });
   </script>
 </body>
 </html>
